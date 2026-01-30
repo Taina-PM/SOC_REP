@@ -1,0 +1,10 @@
+
+selenium==4.34.0
+
+python-dotenv==1.1.1
+
+cx_oracle==8.3.0
+
+pandas==2.3.0
+
+pyperclip==1.11.0
