@@ -8,5 +8,6 @@ class SocLocators:
     LUPA_EMPRESA_OPTION = "//*[@id='procuraModalBtn']"  
     CPF_INPUT = '//*[@id="cpf_input_placeholder"]'
     BTN_EXECUTAR = '//*[@id="btn_executar_placeholder"]'
-    EMPRESA_PAGUE_MENOS = '//*[@id="listaemop"]/table/tbody/tr[13]/td[2]/a'
+    # EMPRESA_PAGUE_MENOS = "//a[contains(text(), 'PAGUE MENOS')]"
+    EMPRESA_PAGUE_MENOS = "//a[contains(normalize-space(.), 'PAGUE MENOS')]"
     BOTAO_FECHAR_POPUP_EMPRESA = '//*[@id="botaoFechar"]/img'

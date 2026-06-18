@@ -7,7 +7,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (TimeoutException, NoSuchElementException, ElementClickInterceptedException, WebDriverException,
         StaleElementReferenceException, NoAlertPresentException,UnexpectedAlertPresentException)
-
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException, WebDriverException
+import time
 logger = setup_logger()
 
 
@@ -57,149 +62,113 @@ def fechar_popup(driver, timeout: int = 5, tentativas: int = 2):
     return False
 
 
-def acessar_programa_232(driver, timeout=10):
-   
-    logger.info("Iniciando acesso ao programa 232...")
 
+# --- 1. SELECIONAR EMPRESA (LIDANDO COM NOVA JANELA/POPUP) ---
+def selecionar_empresa_por_lupa(driver, timeout_global=30):
+    logger.info("Iniciando seleção de empresa pela lupa...")
+    
     try:
-    
-        logger.debug("Garantindo que o driver está no default_content...")
-        driver.switch_to.default_content() 
-
-        logger.debug("Aguardando campo do código estar clicável...")
-        campo = wait_for_clickable(driver, By.XPATH, SocLocators.COD_PROGRAMA, timeout)
-
-        driver.execute_script("arguments[0].scrollIntoView(true);", campo)
-
-        driver.execute_script(
-            "arguments[0].value = '232'; arguments[0].dispatchEvent(new Event('change'));", campo
-        )
-        valor = campo.get_attribute("value")
-        logger.info(f"Campo de código definido. Valor atual: '{valor}'")
-
-        try:
-            btn = wait_for_clickable(driver, By.XPATH, SocLocators.BTN_OK_PROGRAMA, timeout)
-            driver.execute_script("arguments[0].scrollIntoView(true);", btn)
-
-            try:
-                btn.click()
-            except ElementClickInterceptedException:
-                logger.warning("Clique no botão OK interceptado. Tentando via JavaScript...")
-                driver.execute_script("arguments[0].click();", btn)
-            except WebDriverException as e:
-                logger.warning(f"Erro ao clicar no botão OK: {e}. Tentando via JavaScript...")
-                driver.execute_script("arguments[0].click();", btn)
-
-        except (TimeoutException, NoSuchElementException) as e_btn:
-            logger.error(f"Botão OK do programa 232 não encontrado: {e_btn}")
-            raise TimeoutException("Botão OK do programa 232 não foi encontrado.") from e_btn
-        
-        logger.debug("Aguardando 'socFrame' carregar" )
-        WebDriverWait(driver, 15).until(
-            EC.frame_to_be_available_and_switch_to_it((By.ID, "socframe"))
-        )
-
-        logger.info("Programa 232 acessado e 'socframe' verificado com sucesso.")
-        
-        driver.switch_to.default_content() 
-        return True
-    except (TimeoutException, NoSuchElementException) as e_campo:
-        logger.error(f"Campo do código do programa 232 não encontrado: {e_campo}")
-        raise TimeoutException("Campo do código do programa 232 não foi encontrado.") from e_campo
-    
-    except WebDriverException as e_wd:
-        logger.error(f"Erro inesperado de WebDriver ao acessar o programa 232: {e_wd}")
-        raise WebDriverException(f"Erro de WebDriver ao acessar Prog 232: {e_wd}") from e_wd
-    
-    except Exception as e:
-        logger.exception(f"Erro geral inesperado ao acessar o programa 232: {e}")
-        raise WebDriverException(f"Erro inesperado ao acessar Prog 232: {e}") from e
-    
-    
-def selecionar_empresa_por_lupa(driver):
-    try:
-        logger.info("Aguardando carregamento da tela principal do SOC...")
-        wait_for_presence(driver, By.XPATH, '//*[@id="cod_programa"]', timeout=90)
-        logger.info("Tela principal carregada. Aguardando estabilização...")
-        time.sleep(2) 
-    except Exception as e:
-        logger.error(f"Erro ao carregar a tela principal: {e}")
-        raise RuntimeError("Falha ao carregar a tela principal antes de abrir a lupa.") from e
-
-    try:
+        # Garante o foco no frame principal onde a lupa está
         driver.switch_to.default_content()
         WebDriverWait(driver, 15).until(
             EC.frame_to_be_available_and_switch_to_it((By.ID, "socframe"))
         )
-        logger.info("Alternado para o iframe 'socframe'.")
 
-        lupa = wait_for_clickable(driver, By.ID, "procuraModalBtn", timeout=30)
-        
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", lupa)
-        time.sleep(0.5)
+        # Clica na lupa para abrir o modal/área de busca
+        lupa = wait_for_clickable(driver, By.ID, "procuraModalBtn", timeout=15)
+        driver.execute_script("arguments[0].click();", lupa)
+        logger.info("Lupa clicada. Aguardando modal de busca de empresa.")
 
-        try:
-            logger.info("Tentando clicar na lupa...")
-            lupa.click()
-        except (ElementClickInterceptedException, WebDriverException):
-            logger.warning("Clique convencional na lupa falhou/interceptado. Forçando via JavaScript.")
-            driver.execute_script("arguments[0].click();", lupa)
-        
-        logger.info("Lupa clicada com sucesso.")
+        # O modal de busca abre no mesmo contexto (frame), não em uma nova janela.
+        # Aguarda o link da empresa estar visível e clicável.
+        # O XPath é baseado no HTML fornecido, buscando um link que contenha o texto da empresa.
+        empresa_locator = (By.XPATH, "//a[contains(text(), 'PAGUE MENOS COMERCIO DE PRODUTOS ALIMENTICIOS LTDA')]")
+        empresa_element = wait_for_clickable(driver, *empresa_locator, timeout=timeout_global)
 
-    except Exception as e:
-        logger.error(f"Falha ao localizar ou clicar na lupa: {e}")
-        driver.switch_to.default_content()
-        raise RuntimeError("Erro ao tentar clicar na lupa para selecionar a empresa.") from e
+        if not empresa_element:
+            # Se o wait_for_clickable retornar None, o elemento não foi encontrado.
+            logger.error("Não foi possível localizar o link da empresa 'PAGUE MENOS' na lista.")
+            raise TimeoutException("O link da empresa 'PAGUE MENOS' não foi encontrado após clicar na lupa.")
 
-    try:
-        driver.switch_to.default_content()
-        logger.info("Aguardando os iframes do modal da lupa ficarem disponíveis...")
-        
-        time.sleep(2) 
-        
-        iframes = WebDriverWait(driver, 15).until(
-            EC.presence_of_all_elements_located((By.TAG_NAME, "iframe"))
-        )
-        logger.info(f"{len(iframes)} iframes detectados após clicar na lupa.")
+        logger.info("Empresa 'PAGUE MENOS' localizada. Clicando...")
 
-        empresa_element = None
-        found = False
-        
-        for i, iframe in enumerate(iframes):
-            try:
-                driver.switch_to.default_content()
-                driver.switch_to.frame(iframe)
-
-                if wait_for_presence(driver, By.XPATH, SocLocators.EMPRESA_PAGUE_MENOS, timeout=2):
-                    logger.info(f"Empresa 'PAGUE MENOS' encontrada no iframe {i}.")
-                    empresa_element = driver.find_element(By.XPATH, SocLocators.EMPRESA_PAGUE_MENOS)
-                    found = True
-                    break
-            except Exception:
-                continue
-
-        if not found or not empresa_element:
-            raise RuntimeError("Empresa 'PAGUE MENOS' não encontrada em nenhum iframe.")
-
+        # Usa JavaScript para garantir o clique e a rolagem, o que é mais confiável.
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", empresa_element)
-        time.sleep(0.5)
         try:
             empresa_element.click()
         except ElementClickInterceptedException:
-             driver.execute_script("arguments[0].click();", empresa_element)
-             
-        logger.info("Empresa 'PAGUE MENOS' selecionada com sucesso.")
+            logger.warning("Clique na empresa foi interceptado, tentando com JavaScript.")
+            driver.execute_script("arguments[0].click();", empresa_element)
 
+        # Após o clique, o SOC atualiza a página principal.
+        # É uma boa prática garantir que o driver volte ao contexto padrão.
         driver.switch_to.default_content()
+        
         fechar_popup(driver)
-        logger.info("Pop-up de empresa fechado com sucesso.")
+        logger.info("Empresa selecionada com sucesso!")
+        return True
 
     except Exception as e:
-        logger.error(f"Erro durante a seleção da empresa: {e}")
-        driver.switch_to.default_content()
-        raise RuntimeError("Falha ao selecionar empresa 'PAGUE MENOS' no modal.") from e
-    
+        logger.error(f"Falha crítica ao selecionar empresa: {e}")
+        driver.switch_to.default_content() # Garante a saída de qualquer frame em caso de erro
+        raise RuntimeError("Erro ao tentar selecionar a empresa 'PAGUE MENOS'.") from e  
+
+
+# --- 2. ACESSAR PROGRAMA 232 (SIMULANDO DIGITAÇÃO REAL) ---
+def acessar_programa_232(driver, timeout=15, max_tentativas=2):
+    logger.info("Iniciando acesso ao programa 232...")
+
+    for tentativa in range(1, max_tentativas + 1):
+        try:
+            logger.debug(f"Tentativa {tentativa}/{max_tentativas} para acessar o programa 232.")
+            # Garante que está fora de qualquer iframe
+            driver.switch_to.default_content() 
+
+            campo = wait_for_clickable(driver, By.ID, "cod_programa", timeout)
+            driver.execute_script("arguments[0].scrollIntoView(true);", campo)
+            
+            # Em vez de injetar JS puro, clicamos e digitamos para disparar o 'onkeyup' do SOC
+            campo.click()
+            campo.clear()
+            time.sleep(0.2)
+            campo.send_keys("232")
+            time.sleep(0.3)
+
+            # VERIFICAÇÃO E CORREÇÃO: Garante que o valor "232" foi inserido corretamente.
+            valor_no_campo = campo.get_attribute("value")
+            if valor_no_campo != "232":
+                logger.warning(f"O valor no campo era '{valor_no_campo}' em vez de '232'. Corrigindo com JS.")
+                driver.execute_script("arguments[0].value = '232';", campo)
+
+            campo.send_keys(Keys.TAB) # Dispara o 'onblur' de validação
+            
+            logger.info(f"Código '232' inserido e validado. Valor final no campo: '{campo.get_attribute('value')}'")
+
+            # Localiza e clica no botão OK
+            btn = wait_for_clickable(driver, By.ID, "btn_programa", timeout)
+            try:
+                btn.click()
+            except ElementClickInterceptedException:
+                driver.execute_script("arguments[0].click();", btn)
+
+            # Espera o SOC processar e carregar o novo iframe interno
+            logger.debug("Aguardando 'socframe' carregar pós-redirecionamento...")
+            WebDriverWait(driver, 15).until(
+                EC.frame_to_be_available_and_switch_to_it((By.ID, "socframe"))
+            )
+
+            # VERIFICAÇÃO: Confirma se um elemento da tela de pesquisa está presente
+            WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.NAME, "nomeSeach")))
+            logger.info("Programa 232 acessado e verificado com sucesso.")
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Falha na tentativa {tentativa} de acessar o programa 232: {e}")
+            if tentativa == max_tentativas:
+                logger.error("Todas as tentativas de acessar o programa 232 falharam.")
+                raise WebDriverException(f"Erro final ao acessar Prog 232: {e}") from e
+            time.sleep(2) # Pausa antes de tentar novamente
+        
 def fechar_alerta_se_existir(driver, contexto=""):
     try:
         alert = driver.switch_to.alert

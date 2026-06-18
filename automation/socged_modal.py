@@ -2,11 +2,12 @@ import time
 import re
 import os
 from selenium.webdriver.common.by import By
+from pathlib import Path
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import StaleElementReferenceException, UnexpectedAlertPresentException, NoAlertPresentException
+from selenium.common.exceptions import StaleElementReferenceException, UnexpectedAlertPresentException, NoAlertPresentException, TimeoutException
 
-from utils.downloads import garantir_pasta_download, renomear_e_mover_arquivo, PASTA_DOWNLOAD_PADRAO
+from utils.downloads import garantir_pasta_download, esperar_download_e_mover, PASTA_DOWNLOAD_PADRAO
 from utils.logger import setup_logger
 from automation.socged_actions import registrar_cpf
 from utils.alert_handler import wait_for_alert_and_handle
@@ -113,15 +114,9 @@ def baixar_todos_documentos_modal(driver, cpf, matricula, arquivos_existentes=No
             for item in lista_downloads:
                 nome_original = item["nome_raw"]
                 
-                nome_limpo_windows = limpar_nome_arquivo_windows(nome_original)
-                if not nome_limpo_windows.lower().endswith('.pdf'):
-                    nome_final = f"{nome_limpo_windows}.pdf"
-                else:
-                    nome_final = nome_limpo_windows
+                nome_final = limpar_nome_arquivo_windows(nome_original)
                 
-              
                 nome_comparacao = limpar_string_comparacao(nome_final)
-                
                 if nome_comparacao in lista_existentes_limpa:
                     logger.info(f" >> [PULANDO] '{nome_final}' já identificado no SharePoint (Match: {nome_comparacao}).")
                     continue
@@ -137,14 +132,19 @@ def baixar_todos_documentos_modal(driver, cpf, matricula, arquivos_existentes=No
                             )
                         )[item["index"]]
 
+                        # Limpa o 'consulta.zip' antigo ANTES de clicar para baixar
+                        caminho_zip_antigo = Path(PASTA_DOWNLOAD_PADRAO) / "consulta.zip"
+                        if caminho_zip_antigo.exists():
+                            logger.debug(f"Limpando 'consulta.zip' antigo antes do download.")
+                            os.remove(caminho_zip_antigo)
+
                         driver.execute_script("arguments[0].scrollIntoView(true);", link_click)
                         driver.execute_script("arguments[0].click();", link_click)
                         
                         wait_for_alert_and_handle(driver)
-                        time.sleep(5) 
-
-                        renomear_e_mover_arquivo(nome_final, pasta_destino_matricula)
                         
+                        # Nova função que espera o download ser concluído de forma segura
+                        esperar_download_e_mover(nome_final, pasta_destino_matricula)
                         arquivos_baixados_sessao += 1
                         sucesso = True
                         break
@@ -154,7 +154,10 @@ def baixar_todos_documentos_modal(driver, cpf, matricula, arquivos_existentes=No
                         driver.switch_to.default_content()
                         try:
                             WebDriverWait(driver, 5).until(EC.frame_to_be_available_and_switch_to_it(iframe_modal))
-                        except: pass
+                        except TimeoutException:
+                            logger.warning("Não foi possível voltar para o iframe do modal após falha no download. Tentando continuar...")
+                        except Exception as frame_e:
+                            logger.error(f"Erro inesperado ao tentar voltar para o iframe do modal: {frame_e}")
                 
                 if not sucesso:
                     logger.error(f"[{cpf}] Falha ao baixar {nome_final}.")
@@ -173,4 +176,3 @@ def baixar_todos_documentos_modal(driver, cpf, matricula, arquivos_existentes=No
             driver.switch_to.default_content()
 
     logger.info(f"[{cpf}] Download finalizado. {arquivos_baixados_sessao} novos arquivos.")
-

@@ -42,7 +42,8 @@ RETRYABLE_STATUS_CODES = [
     504  
 ]
 
-BASE_FOLDER_SHAREPOINT = "104 - Arquivos Migração/Medicina e Segurança/Documentos Físicos"
+# BASE_FOLDER_SHAREPOINT = "104 - Arquivos Migração/Medicina e Segurança/Documentos Físicos"
+BASE_FOLDER_SHAREPOINT = "SOC_REP"
 
 def get_access_token():
     """Gera o token de acesso para o Microsoft Graph API"""
@@ -143,6 +144,7 @@ def listar_conteudo_pasta_com_zips(matricula):
                 except Exception as e:
                     logger.error(f"Erro ao ler ZIP {nome}: {e}")
                     lista_final.append(nome)
+            # 3. Adiciona arquivos normais à lista
             else:
                 lista_final.append(nome)
                 

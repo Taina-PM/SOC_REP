@@ -51,6 +51,9 @@ def processar_um_cpf(driver, cpf, matricula_limpa, usuario, senha, empresa_id):
 
         logger.debug("Switch para iframe 'socframe' realizado com sucesso.")
 
+        
+        logger.debug("Switch para iframe 'socframe' realizado com sucesso.")
+
         for name in ["inativo", "pendente"]:
             try:
                 checkbox = WebDriverWait(driver, 5).until(
@@ -69,6 +72,18 @@ def processar_um_cpf(driver, cpf, matricula_limpa, usuario, senha, empresa_id):
             except Exception as e:
                 logger.debug(f"Erro ao manipular checkbox '{name}': {e}")
         
+        try:
+            radio = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.XPATH, "//input[@name='codigoPesquisaFuncionario' and @value='3']"))
+            )
+            if not radio.is_selected():
+                driver.execute_script("arguments[0].click();", radio)
+            logger.debug("Rádio CPF selecionado.")
+        except TimeoutException:
+            logger.error("Rádio 'CPF' não encontrado — possível mudança no layout.")
+            return
+
+
         try:
             radio = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.XPATH, "//input[@name='codigoPesquisaFuncionario' and @value='3']"))
@@ -124,16 +139,20 @@ def processar_um_cpf(driver, cpf, matricula_limpa, usuario, senha, empresa_id):
         
             logger.info(f"Processamento de documentos para {cpf} finalizado.")
         
+            # Faz o upload e limpa os arquivos locais APENAS se o download foi bem-sucedido
+            enviar_e_limpar_arquivos_cpf(matricula_limpa)
+
         else:
             logger.warning(f"SOCGED não pôde ser aberto para o CPF {cpf}.")
 
-  
+        # Navega de volta para a tela de pesquisa ANTES de finalizar o processamento do CPF
         try:
+            logger.info(f"[{cpf}] Processamento de documentos finalizado. Retornando para a tela de pesquisa (Prog. 232)...")
             driver.switch_to.default_content()
             acessar_programa_232(driver)
-        except Exception as e:
-            raise e
-        
+        except Exception as e_nav:
+            logger.error(f"Falha ao retornar para o programa 232 após processar {cpf}. Erro: {e_nav}")
+            raise SessionExpiredException("Falha de navegação pós-processamento.")
     except UnexpectedAlertPresentException as e_alert:
         logger.error(f"Erro (ALERTA INESPERADO) no CPF {cpf}. Alerta: '{e_alert.alert_text}'")
         registrar_cpf(cpf, tipo="erro")
@@ -213,9 +232,15 @@ def pesquisar_cpfs(driver, usuario, senha, empresa_id, caminho_csv="data/cpfs.cs
                 logger.info(f"Iniciando tentativa {tentativas_cpf + 1}/{MAX_RETRIES_CPF} para CPF {cpf}...")
                 processar_um_cpf(driver, cpf, matricula_limpa, usuario, senha, empresa_id)
                 
-                enviar_e_limpar_arquivos_cpf(matricula_limpa)
-                
                 processado_com_sucesso = True
+
+                # Navega de volta para a tela de pesquisa para o próximo CPF
+                try:
+                    logger.info(f"[{cpf}] Retornando para a tela de pesquisa (Prog. 232)...")
+                    acessar_programa_232(driver)
+                except Exception as e_nav:
+                    logger.error(f"Falha ao retornar para o programa 232. Será necessário reiniciar o driver. Erro: {e_nav}")
+                    raise SessionExpiredException("Falha de navegação pós-processamento.")
 
             except (
                 SessionExpiredException,

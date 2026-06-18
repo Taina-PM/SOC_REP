@@ -4,6 +4,7 @@ from pathlib import Path
 import time
 import re
 from utils.logger import setup_logger
+import zipfile 
 from utils.onedrive_uploader import upload_folder_to_sharepoint
 
 logger = setup_logger()
@@ -17,40 +18,71 @@ def garantir_pasta_download():
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     return DOWNLOAD_DIR
 
-def renomear_e_mover_arquivo(nome_final_com_extensao: str, pasta_destino_matricula: str):
+def esperar_download_e_mover(nome_final_com_extensao: str, pasta_destino_matricula: str, timeout_segundos=120):
 
-    try:
-        if not os.path.exists(pasta_destino_matricula):
-            os.makedirs(pasta_destino_matricula, exist_ok=True)
+    if not os.path.exists(pasta_destino_matricula):
+        os.makedirs(pasta_destino_matricula, exist_ok=True)
 
-        extensoes_temp = [".crdownload", ".tmp", ".part", ".inprogress", ".download"]
-        
-        ultimo_arquivo = None
-        for _ in range(10):
-            arquivos = [
-                f for f in DOWNLOAD_DIR.glob("*") 
-                if f.is_file() and f.suffix.lower() not in extensoes_temp
-            ]
-            if arquivos:
-                ultimo_arquivo = max(arquivos, key=os.path.getmtime)
+    caminho_final = Path(pasta_destino_matricula) / nome_final_com_extensao
+    
+    if caminho_final.exists():
+        logger.warning(f"Arquivo '{caminho_final.name}' já existe. Gerando nome alternativo.")
+        base, ext = os.path.splitext(nome_final_com_extensao)
+        contador = 1
+        while True:
+            novo_nome = f"{base} ({contador}){ext}"
+            novo_caminho = Path(pasta_destino_matricula) / novo_nome
+            if not novo_caminho.exists():
+                caminho_final = novo_caminho
                 break
-            time.sleep(1)
+            contador += 1
+        logger.info(f"Arquivo será salvo como '{caminho_final.name}'.")
+
+    caminho_zip_esperado = DOWNLOAD_DIR / "consulta.zip"
+    tempo_inicio = time.time()
+    download_concluido = False
+    
+    logger.info("Aguardando download do arquivo 'consulta.zip'...")
+    while time.time() - tempo_inicio < timeout_segundos:
+        if caminho_zip_esperado.exists():
+            time.sleep(1) # Pausa para garantir que o arquivo foi completamente escrito
+            logger.info(f"Arquivo '{caminho_zip_esperado.name}' detectado.")
+            download_concluido = True
+            break
+        time.sleep(0.3)
+    
+    if not download_concluido:
+        raise FileNotFoundError(f"Timeout: O arquivo 'consulta.zip' não foi encontrado em {timeout_segundos}s.")
+    
+    # 2. Processa o arquivo 'consulta.zip'
+    try:
+        logger.info(f"Processando '{caminho_zip_esperado.name}'...")
+        with zipfile.ZipFile(caminho_zip_esperado, 'r') as zip_ref:
+            lista_arquivos_zip = zip_ref.namelist()
+            if not lista_arquivos_zip:
+                raise zipfile.BadZipFile("Arquivo ZIP está vazio.")
+            
+            nome_arquivo_interno = lista_arquivos_zip[0]
+            logger.info(f"Extraindo '{nome_arquivo_interno}' do ZIP...")
+            
+            # Extrai o arquivo para a pasta de downloads principal temporariamente
+            caminho_extraido_temp = Path(zip_ref.extract(nome_arquivo_interno, path=DOWNLOAD_DIR))
         
-        if not ultimo_arquivo:
-            raise Exception(f"Nenhum arquivo encontrado em {DOWNLOAD_DIR} após o download.")
-
-        caminho_final = Path(pasta_destino_matricula) / nome_final_com_extensao
-
-        if caminho_final.exists():
-            os.remove(caminho_final)
-
-        shutil.move(str(ultimo_arquivo), str(caminho_final))
+        # Move o arquivo extraído para a pasta de destino da matrícula com o nome final correto
+        shutil.move(str(caminho_extraido_temp), str(caminho_final))
+        logger.info(f"Arquivo extraído e salvo em: {caminho_final}")
         
-        logger.info(f"Arquivo organizado em: {caminho_final}")
+        # Remove o arquivo .zip após o sucesso
+        os.remove(caminho_zip_esperado)
+        logger.info(f"Arquivo '{caminho_zip_esperado.name}' removido.")
+        
         return str(caminho_final)
-
+    
     except Exception as e:
-        logger.error(f"Erro ao mover/renomear arquivo: {e}")
+        logger.error(f"Falha ao processar o arquivo ZIP: {e}")
+        # Tenta limpar o zip mesmo em caso de erro de extração
+        if caminho_zip_esperado.exists():
+            os.remove(caminho_zip_esperado)
         raise e
 
 def limpar_downloads_incompletos_cpf(matricula: str):
@@ -83,4 +115,3 @@ def enviar_e_limpar_arquivos_cpf(matricula: str):
         logger.error(f"Falha no upload da Matrícula {matricula}.")
 
     return sucesso
-
