@@ -19,40 +19,6 @@ _DRIVER_USE_COUNT = 0
 _MAX_USES = 99999
 _TEMP_USER_DATA_DIR = None
 
-def _get_proxy_extension():
-    """Cria e retorna o caminho para a extensão de autenticação de proxy."""
-    proxy_user = os.getenv("PROXY_USER")
-    proxy_pass = os.getenv("PROXY_PASS")
-
-    if not proxy_user or not proxy_pass:
-        logger.warning("Credenciais de proxy (PROXY_USER, PROXY_PASS) não encontradas no .env. A autenticação de proxy será ignorada.")
-        return None
-
-    manifest_json = """
-    {
-        "version": "1.0.0", "manifest_version": 2, "name": "Proxy Auth",
-        "permissions": ["proxy", "tabs", "unlimitedStorage", "storage", "<all_urls>", "webRequest", "webRequestBlocking"],
-        "background": { "scripts": ["background.js"] },
-        "minimum_chrome_version":"22.0.0"
-    } """
-    background_js = f"""
-    var config = {{ mode: "system" }};
-    chrome.proxy.settings.set({{value: config, scope: "regular"}}, function() {{}});
-    function callbackFn(details) {{ return {{ authCredentials: {{ username: "{proxy_user}", password: "{proxy_pass}" }} }}; }}
-    chrome.webRequest.onAuthRequired.addListener(callbackFn, {{urls: ["<all_urls>"]}}, ['blocking']);
-    """
-    
-    # Usar um diretório temporário para a extensão
-    ext_dir = os.path.join(tempfile.gettempdir(), "proxy_auth_ext")
-    os.makedirs(ext_dir, exist_ok=True)
-
-    with open(os.path.join(ext_dir, "manifest.json"), "w") as f:
-        f.write(manifest_json)
-    with open(os.path.join(ext_dir, "background.js"), "w") as f:
-        f.write(background_js)
-        
-    return ext_dir
-
 def reiniciar_driver_existente(driver, usuario, senha, empresa_id, motivo="Erro não especificado"):
     global _DRIVER_INSTANCE, _DRIVER_USE_COUNT
 
@@ -130,11 +96,6 @@ def create_driver(headless: bool = True):
 
         options.add_experimental_option("prefs", prefs)
         options.add_argument("--inprivate")
-        
-        # Adiciona a extensão de proxy, se as credenciais existirem
-        proxy_extension_path = _get_proxy_extension()
-        if proxy_extension_path:
-            options.add_argument(f"--load-extension={proxy_extension_path}")
 
         if headless:
             options.add_argument("--headless=new")          

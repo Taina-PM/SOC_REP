@@ -90,12 +90,14 @@ def registrar_cpf(cpf, tipo="erro", arquivos_baixados=0, total_arquivos=None):
         "sem_icone": "cpfs_sem_icone.txt",
         "inativo": "cpfs_inativos.txt",
         "erro": "cpfs_erros.txt",
-        "interrompido": "cpfs_interrompidos_sessao.txt"
+        "interrompido": "cpfs_interrompidos_sessao.txt",
+        "sucesso": "cpfs_sucesso.txt"
     }
 
     mensagens_map = {
         "sem_icone": f"{cpf} - CPF Não possui arquivos para baixar",
         "inativo": f"{cpf} - CPF Inativo ou não encontrado",
+        "sucesso": f"{cpf} - Processado e enviado com sucesso",
         "erro": f"{cpf} - CPF não enviado ao sharepoint",
     }
 

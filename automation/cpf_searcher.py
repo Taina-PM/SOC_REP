@@ -137,10 +137,12 @@ def processar_um_cpf(driver, cpf, matricula_limpa, usuario, senha, empresa_id):
             arquivos_existentes=listar_conteudo_pasta_com_zips(matricula_limpa)
         )
         
-            logger.info(f"Processamento de documentos para {cpf} finalizado.")
-        
-            # Faz o upload e limpa os arquivos locais APENAS se o download foi bem-sucedido
-            enviar_e_limpar_arquivos_cpf(matricula_limpa)
+            logger.info(f"[{cpf}] Processamento de documentos finalizado.")
+            
+            # Faz o upload, limpa os arquivos e registra o sucesso
+            if enviar_e_limpar_arquivos_cpf(matricula_limpa):
+                registrar_cpf(cpf, tipo="sucesso")
+
 
         else:
             logger.warning(f"SOCGED não pôde ser aberto para o CPF {cpf}.")
@@ -163,11 +165,31 @@ def processar_um_cpf(driver, cpf, matricula_limpa, usuario, senha, empresa_id):
         logger.exception(f"Erro inesperado ao processar CPF {cpf}: {e}")
         registrar_cpf(cpf, tipo="erro")
         raise e 
+        
+def _carregar_cpfs_ja_processados(output_dir="output"):
+    """Lê todos os arquivos de log no diretório de saída e extrai os CPFs."""
+    cpfs_processados = set()
+    if not os.path.exists(output_dir):
+        return cpfs_processados
+
+    for filename in os.listdir(output_dir):
+        if filename.endswith(".txt"):
+            try:
+                with open(os.path.join(output_dir, filename), "r", encoding="utf-8") as f:
+                    for line in f:
+                        # Extrai o CPF, que é a primeira parte da linha (ex: "12345678900 - ...")
+                        match = line.strip().split(" ")[0]
+                        if match.isdigit() and len(match) >= 11:
+                            cpfs_processados.add(match)
+            except Exception as e:
+                logger.warning(f"Não foi possível ler o arquivo de log '{filename}': {e}")
+    
+    return cpfs_processados
 
 
-def pesquisar_cpfs(driver, usuario, senha, empresa_id, caminho_csv="data/cpfs.csv"):
+def pesquisar_cpfs(usuario, senha, empresa_id, caminho_csv="data/cpfs.csv"):
 
-    MAX_RETRIES_CPF = 3 
+    MAX_RETRIES_CPF = 3
 
     logger.info("Iniciando leitura de CPFs para pesquisa no SOC...")
     
@@ -184,6 +206,21 @@ def pesquisar_cpfs(driver, usuario, senha, empresa_id, caminho_csv="data/cpfs.cs
         logger.error(f"Erro ao ler o arquivo CSV '{caminho_csv}': {e}")
         return
 
+    # --- LÓGICA PARA CONTINUAR DE ONDE PAROU ---
+    cpfs_ja_processados = _carregar_cpfs_ja_processados()
+    if cpfs_ja_processados:
+        total_antes = len(df)
+        logger.info(f"Encontrados {len(cpfs_ja_processados)} CPFs já processados em execuções anteriores.")
+        # Filtra o DataFrame, mantendo apenas os CPFs que NÃO estão na lista de processados
+        df = df[~df['CPF_PESSOA'].isin(cpfs_ja_processados)]
+        total_depois = len(df)
+        logger.info(f"CPFs a processar nesta sessão: {total_depois} (de {total_antes} originais).")
+
+    if df.empty:
+        logger.info("Todos os CPFs do arquivo CSV já foram processados. Encerrando.")
+        return
+    # -----------------------------------------
+
     try:
         driver = create_driver(headless=False)
         realizar_login(driver, usuario, senha, empresa_id)
@@ -197,6 +234,7 @@ def pesquisar_cpfs(driver, usuario, senha, empresa_id, caminho_csv="data/cpfs.cs
             driver.quit()
         return
     
+    # Reinicia o índice para iterar sobre o DataFrame filtrado
     idx = 0
 
     while idx < len(df):
