@@ -15,6 +15,9 @@ logger = setup_logger()
 
 OUTPUT_DIR = "output"
 
+# Conjunto para rastrear CPFs já registrados nesta sessão e evitar duplicatas nos logs
+_logged_cpfs_this_session = set()
+
 def abrir_socged(driver, cpf, max_tentativas=3):
  
     wait = WebDriverWait(driver, 15)
@@ -77,6 +80,12 @@ def abrir_socged(driver, cpf, max_tentativas=3):
 
 def registrar_cpf(cpf, tipo="erro", arquivos_baixados=0, total_arquivos=None):
   
+    # Chave única para evitar registrar o mesmo CPF para o mesmo erro várias vezes na mesma execução
+    log_key = f"{cpf}|{tipo}"
+    if log_key in _logged_cpfs_this_session:
+        logger.debug(f"[{cpf}] Já foi registrado para o tipo '{tipo}' nesta sessão. Ignorando registro duplicado.")
+        return
+
     arquivos_map = {
         "sem_icone": "cpfs_sem_icone.txt",
         "inativo": "cpfs_inativos.txt",
@@ -113,6 +122,9 @@ def registrar_cpf(cpf, tipo="erro", arquivos_baixados=0, total_arquivos=None):
         with open(caminho_completo, "a", encoding="utf-8") as arquivo:
             arquivo.write(mensagem + "\n")
         
+        # Adiciona à lista de controle para não registrar novamente
+        _logged_cpfs_this_session.add(log_key)
+
         logger_func(f"[{cpf}] Registrado: {mensagem}")
         
     except (IOError, OSError) as e:

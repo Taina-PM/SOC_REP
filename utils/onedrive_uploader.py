@@ -59,6 +59,22 @@ def get_access_token():
         logger.error(f"Erro ao obter token: {result.get('error_description')}")
         raise Exception("Falha na autenticação com o SharePoint")
 
+def _delete_file_by_id(item_id, token):
+    """Função auxiliar para deletar um item no SharePoint pelo seu ID."""
+    headers = {"Authorization": f"Bearer {token}"}
+    url_delete = f"https://graph.microsoft.com/v1.0/drives/{DRIVE_ID}/items/{item_id}"
+    
+    try:
+        response = requests.delete(url_delete, headers=headers)
+        if response.status_code == 204:
+            return True
+        else:
+            logger.error(f"Falha ao deletar item ID {item_id}. Status: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Exceção ao deletar item ID {item_id}: {e}")
+        return False
+
 
 def upload_folder_to_sharepoint(local_folder_path, remote_folder_name):
     """
@@ -121,30 +137,14 @@ def listar_conteudo_pasta_com_zips(matricula):
         
         for item in items:
             nome = item['name']
-            download_url = item.get('@microsoft.graph.downloadUrl')
             
-            if nome.lower().endswith('.zip') and download_url:
-                logger.info(f"[{matricula}] Inspecionando ZIP: {nome}...")
-                try:
-                    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp_file:
-                        with requests.get(download_url, stream=True) as r:
-                            r.raise_for_status()
-                            for chunk in r.iter_content(chunk_size=8192):
-                                tmp_file.write(chunk)
-                        tmp_path = tmp_file.name
-                    
-                    with zipfile.ZipFile(tmp_path, 'r') as zf:
-                        conteudo_zip = zf.namelist()
-                        logger.info(f"   -> Conteúdo de {nome}: {conteudo_zip}")
-                        lista_final.extend(conteudo_zip)
-                        lista_final.append(nome)
-                    
-                    os.remove(tmp_path)
-                    
-                except Exception as e:
-                    logger.error(f"Erro ao ler ZIP {nome}: {e}")
-                    lista_final.append(nome)
-            # 3. Adiciona arquivos normais à lista
+            # NOVA LÓGICA: Se encontrar um ZIP, apaga e não adiciona à lista.
+            if nome.lower().endswith('.zip'):
+                item_id = item['id']
+                logger.warning(f"[{matricula}] Arquivo ZIP obsoleto encontrado no SharePoint: '{nome}'. Deletando para reprocessar...")
+                if _delete_file_by_id(item_id, token):
+                    logger.info(f"   -> ZIP '{nome}' deletado com sucesso.")
+                # Não adiciona o ZIP nem seu conteúdo à lista, forçando o re-download.
             else:
                 lista_final.append(nome)
                 

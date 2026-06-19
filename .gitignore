@@ -1,1 +1,14 @@
-config/.env 
+# Cache do Python
+__pycache__/
+
+# Arquivos de log gerados pela automação
+logs/
+
+# Arquivos de saída (listas de CPFs, etc.)
+output/
+
+# Arquivos baixados durante a execução
+downloads/
+
+# Arquivos de configuração de ambiente (contém segredos)
+config/.env
