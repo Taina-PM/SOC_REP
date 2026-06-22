@@ -38,11 +38,13 @@ def main():
         print("---  ERRO CRÍTICO DE CONFIGURAÇÃO ---")
         raise ValueError("Verifique se SOC_USER, SOC_EMPRESA_ID e SOC_BASE_URL estão definidos no config/.env")
 
+    sucesso = False
     try:
         # A função pesquisar_cpfs agora gerencia seu próprio driver
-        pesquisar_cpfs(usuario, senha, empresa_id, caminho_csv="data/cpfs.csv")
-        logger.info("Fluxo de navegação concluído com sucesso.")
+        sucesso = pesquisar_cpfs(usuario, senha, empresa_id, caminho_csv="data/cpfs.csv")
     except Exception as e:
         logger.exception("Erro crítico na execução: %s", e)
+    finally:
+        logger.info(f"Processo finalizado. Sucesso: {sucesso}")
 if __name__ == "__main__":
     main()

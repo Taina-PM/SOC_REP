@@ -1,16 +1,16 @@
 import os
-import shutil 
-from pathlib import Path
 import time
-import re
-from utils.logger import setup_logger
+import shutil 
 import zipfile 
+from pathlib import Path
+from utils.logger import setup_logger
 from utils.onedrive_uploader import upload_folder_to_sharepoint
 
 logger = setup_logger()
 
 
-PASTA_DOWNLOAD_PADRAO = r"C:\Users\taina.ribeiro\OneDrive - Pague Menos Comercio de Produtos Alimenticios Ltda\Documentos\Dev\Automações\SOC_REP\downloads"
+# PASTA_DOWNLOAD_PADRAO = r"C:\Users\taina.ribeiro\OneDrive - Pague Menos Comercio de Produtos Alimenticios Ltda\Documentos\Dev\Automações\SOC_REP\downloads"
+PASTA_DOWNLOAD_PADRAO = r"C:\SOC_REP\downloads"
 DOWNLOAD_DIR = Path(PASTA_DOWNLOAD_PADRAO)
 
 def garantir_pasta_download():
@@ -45,7 +45,7 @@ def esperar_download_e_mover(nome_final_com_extensao: str, pasta_destino_matricu
     logger.info("Aguardando download do arquivo 'consulta.zip'...")
     while time.time() - tempo_inicio < timeout_segundos:
         if caminho_zip_esperado.exists():
-            time.sleep(1) # Pausa para garantir que o arquivo foi completamente escrito
+            time.sleep(1) 
             logger.info(f"Arquivo '{caminho_zip_esperado.name}' detectado.")
             download_concluido = True
             break
@@ -54,7 +54,6 @@ def esperar_download_e_mover(nome_final_com_extensao: str, pasta_destino_matricu
     if not download_concluido:
         raise FileNotFoundError(f"Timeout: O arquivo 'consulta.zip' não foi encontrado em {timeout_segundos}s.")
     
-    # 2. Processa o arquivo 'consulta.zip'
     try:
         logger.info(f"Processando '{caminho_zip_esperado.name}'...")
         with zipfile.ZipFile(caminho_zip_esperado, 'r') as zip_ref:
@@ -65,14 +64,11 @@ def esperar_download_e_mover(nome_final_com_extensao: str, pasta_destino_matricu
             nome_arquivo_interno = lista_arquivos_zip[0]
             logger.info(f"Extraindo '{nome_arquivo_interno}' do ZIP...")
             
-            # Extrai o arquivo para a pasta de downloads principal temporariamente
             caminho_extraido_temp = Path(zip_ref.extract(nome_arquivo_interno, path=DOWNLOAD_DIR))
         
-        # Move o arquivo extraído para a pasta de destino da matrícula com o nome final correto
         shutil.move(str(caminho_extraido_temp), str(caminho_final))
         logger.info(f"Arquivo extraído e salvo em: {caminho_final}")
         
-        # Remove o arquivo .zip após o sucesso
         os.remove(caminho_zip_esperado)
         logger.info(f"Arquivo '{caminho_zip_esperado.name}' removido.")
         
@@ -80,7 +76,6 @@ def esperar_download_e_mover(nome_final_com_extensao: str, pasta_destino_matricu
     
     except Exception as e:
         logger.error(f"Falha ao processar o arquivo ZIP: {e}")
-        # Tenta limpar o zip mesmo em caso de erro de extração
         if caminho_zip_esperado.exists():
             os.remove(caminho_zip_esperado)
         raise e

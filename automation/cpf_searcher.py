@@ -199,7 +199,7 @@ def pesquisar_cpfs(usuario, senha, empresa_id, caminho_csv="data/cpfs.csv"):
     try:
         df = pd.read_csv(caminho_csv, sep=';', dtype=str)
         if df.empty:
-            logger.warning(f"O arquivo '{caminho_csv}' está vazio.")
+            logger.warning(f"O arquivo '{caminho_csv}' está vazio ou não possui a coluna 'CPF_PESSOA'.")
             return
         logger.info(f"{len(df)} registros carregados com sucesso.")
     except Exception as e:
@@ -218,9 +218,10 @@ def pesquisar_cpfs(usuario, senha, empresa_id, caminho_csv="data/cpfs.csv"):
 
     if df.empty:
         logger.info("Todos os CPFs do arquivo CSV já foram processados. Encerrando.")
-        return
+        return True
     # -----------------------------------------
 
+    driver = None  # Inicializa o driver como None
     try:
         driver = create_driver(headless=False)
         realizar_login(driver, usuario, senha, empresa_id)
@@ -232,7 +233,7 @@ def pesquisar_cpfs(usuario, senha, empresa_id, caminho_csv="data/cpfs.csv"):
         logger.critical(f"Falha crítica na inicialização do driver: {e}", exc_info=True)
         if driver:
             driver.quit()
-        return
+        return False
     
     # Reinicia o índice para iterar sobre o DataFrame filtrado
     idx = 0
@@ -349,4 +350,4 @@ def pesquisar_cpfs(usuario, senha, empresa_id, caminho_csv="data/cpfs.csv"):
     except Exception as e:
         logger.warning(f"Falha ao encerrar driver no final: {e}")
 
-        
+    return True

@@ -1,19 +1,20 @@
 from selenium import webdriver
 from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.edge.options import Options as EdgeOptions
+from webdriver_manager.microsoft import EdgeChromiumDriverManager
 import os
 import tempfile
 import shutil
 import time
+import subprocess
 
 from automation.soc_login import realizar_login
 from automation.soc_navigation import acessar_programa_232, fechar_popup, selecionar_empresa_por_lupa
 from utils.logger import setup_logger
-from pathlib import Path
 
 logger = setup_logger()
 
-DOWNLOAD_DIR_PATH = r"C:\Users\taina.ribeiro\OneDrive - Pague Menos Comercio de Produtos Alimenticios Ltda\Documentos\Dev\Automações\SOC_REP\downloads"
+DOWNLOAD_DIR_PATH = r"C:\SOC_REP\downloads"
 _DRIVER_INSTANCE = None
 _DRIVER_USE_COUNT = 0
 _MAX_USES = 99999
@@ -35,7 +36,7 @@ def reiniciar_driver_existente(driver, usuario, senha, empresa_id, motivo="Erro 
     _DRIVER_INSTANCE = None
     _DRIVER_USE_COUNT = 0
 
-    novo_driver = create_driver(headless=True)
+    novo_driver = create_driver(headless=False)
     
     try:
         realizar_login(novo_driver, usuario, senha, empresa_id)
@@ -110,25 +111,29 @@ def create_driver(headless: bool = True):
         options.add_argument("--mute-audio")
         options.add_argument("--ignore-certificate-errors")
 
-        options.add_argument("--disable-webgl")
-        options.add_argument("--disable-webgl2")
-        options.add_argument("--use-angle=none")
-        options.add_argument("--disable-features=CanvasOopRasterization,WebRTCPipeWireCapturer,IsolateOrigins,site-per-process")
-        options.add_argument("--enable-unsafe-swiftshader")
-        options.add_argument("--use-angle=swiftshader")
         options.add_argument("--disable-3d-apis")
         options.add_argument("--disable-accelerated-2d-canvas")
-        options.add_argument("--disable-accelerated-video-decode")
-        options.add_argument("--disable-accelerated-mjpeg-decode")
-        options.add_argument("--disable-accelerated-video-encode")
 
         _TEMP_USER_DATA_DIR = tempfile.mkdtemp()
         options.add_argument(f"--user-data-dir={_TEMP_USER_DATA_DIR}")
 
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 
-        service = EdgeService(log_output='NUL') 
+        service_args = ["--port=0", "--host=127.0.0.1", "--readable-timestamp"]
 
-        _DRIVER_INSTANCE = webdriver.Edge(service=service, options=options)
+        try:
+            _DRIVER_INSTANCE = webdriver.Edge(options=options)
+        except Exception as primary_exc:
+            logger.warning(f"Selenium Manager falhou ao iniciar o driver: {primary_exc}. Tentando fallback com webdriver-manager.")
+            driver_path = EdgeChromiumDriverManager().install()
+            service = EdgeService(
+                executable_path=driver_path,
+                log_output='NUL',
+                service_args=service_args,
+                creationflags=creationflags
+            )
+
+            _DRIVER_INSTANCE = webdriver.Edge(service=service, options=options)
         
         _DRIVER_INSTANCE.set_page_load_timeout(60) 
         _DRIVER_INSTANCE.set_script_timeout(60)    
